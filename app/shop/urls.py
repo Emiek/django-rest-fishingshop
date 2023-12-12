@@ -5,8 +5,8 @@ from shop import views
 
 app_name = 'shop'
 
-router = SimpleRouter()
-
-router.register('products', views.ProductViewSet, basename='products')
-
-urlpatterns = router.urls
+urlpatterns = [
+    path('products/', views.ProductViewSet.as_view({'get': 'list', 'post': 'create'}), name='product-list'),
+    path('products/<int:pk>/', views.ProductViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}),
+         name='product-detail'),
+]
