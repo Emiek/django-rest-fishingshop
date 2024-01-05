@@ -1,42 +1,5 @@
-from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
-from django.contrib.auth.models import PermissionsMixin
 from django.db import models
-
-
-class UserManager(BaseUserManager):
-    def create_user(self, email, password=None, **extra_fields):
-        """Creates and saves a new user"""
-
-        if not email:
-            raise ValueError('User must have an email address')
-
-        user: 'User' = self.model(email=self.normalize_email(email), **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-
-        return user
-
-    def create_superuser(self, email, password):
-        """Creates and saves a new superuser"""
-
-        user = self.create_user(email, password)
-        user.is_staff = True
-        user.is_superuser = True
-        user.save(using=self._db)
-
-        return user
-
-
-class User(AbstractBaseUser, PermissionsMixin):
-    """Custom user model"""
-    email = models.EmailField(max_length=255, unique=True)
-    name = models.CharField(max_length=255)
-    is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)
-
-    objects = UserManager()
-
-    USERNAME_FIELD = 'email'
+from user.models import User
 
 
 class Category(models.Model):
@@ -46,26 +9,61 @@ class Category(models.Model):
 class Product(models.Model):
     name = models.CharField(max_length=512)
     description = models.TextField()
+    amount_rating = models.PositiveIntegerField(null=True,default=None)
+    total_rating = models.PositiveIntegerField(null=True,default=None)
+    rating = models.PositiveIntegerField(null=True,default=None)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity = models.PositiveIntegerField(default=10000)
+    stock = models.PositiveIntegerField()
     category = models.ForeignKey(Category, null=True, on_delete=models.CASCADE)
-    comment = models.ForeignKey
-
-
-class Basket(models.Model):
-    product = models.ForeignKey(Product, null=True, on_delete=models.CASCADE)
-    poduct_quantity = models.PositiveIntegerField(default=0)
-    total_price = models.DecimalField(max_digits=10, decimal_places=2)
-    user_added = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
-
-
-class Loyalty_program(models.Model):
-    user_added = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    date_added = models.DateField(auto_now=True)
+    img_url = models.URLField(null=True,default=None)
     points = models.PositiveIntegerField()
+
+    def stock_decrease(self, quantity):
+        if self.stock >= quantity:
+            self.stock = self.stock - quantity
+            self.save()
+        else:
+            raise Exception('not enough products in store')
+
+
+class Order(models.Model):
+    user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    products = models.ManyToManyField(Product, through='OrderItem')
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    total_loyalty = models.DecimalField(max_digits=10, decimal_places=2)
+    address = models.TextField()
+    is_paid = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.is_paid:
+            for order_item in self.orderitem_set.all():
+                order_item.product.stock_decrease(order_item.quantity)
+
+    def sum_price_points(self):
+        self.total_price = sum(item.price for item in self.orderitem_set.all())
+        self.total_loyalty = sum(item.loyalty_p for item in self.orderitem_set.all())
+
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, null=True, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, null=True, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    loyalty_p = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def loyalty_p_sum(self):
+        self.loyalty_p = self.product.points * self.quantity
+
+    def save(self, *args, **kwargs):
+        self.loyalty_p_sum()
+        super().save(*args, **kwargs)
 
 
 class Comment(models.Model):
     content = models.TextField()
+    rating = models.PositiveIntegerField()
     date_add = models.DateField(auto_now=True)
     user_added = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, null=True, on_delete=models.CASCADE)

@@ -1,74 +1,37 @@
-from django.contrib.auth import get_user_model, authenticate
 from rest_framework import serializers
-from django.utils.translation import gettext as _
-from shop.models import Product, Category
+from shop import models
+from user.serializers import UserSerializer
+from user.models import User
 
 
-class UserSerializer(serializers.ModelSerializer):
-    """Serializer for the user object"""
+class CommetSerializer(serializers.ModelSerializer):
+    user_added = UserSerializer(read_only=True)
+    date_add = serializers.DateField(read_only=True, format='%d %B %Y')
     class Meta:
-        model = get_user_model()
-        fields = ('email', 'password', 'name')
-        extra_kwargs = {
-            'password': {
-                'write_only': True,
-                'min_length': 5,
-            },
-            'email': {
-                'write_only': True,
-            },
-        }
-
-    def create(self, validated_data):
-        """Create a new user with encrypted password and return it"""
-
-        return get_user_model().objects.create_user(**validated_data)
-
-    def update(self, instance, validated_data):
-        """Update a user, setting the password correctly and return it"""
-
-        password = validated_data.pop('password', None)
-        user = super().update(instance, validated_data)
-
-        if password:
-            user.set_password(password)
-            user.save()
-
-        return user
-
-
-class AuthTokenSerializer(serializers.Serializer):
-    """Serializer for the user authentication object"""
-
-    email = serializers.CharField()
-    password = serializers.CharField(
-        style={'input_type': 'password'},
-        trim_whitespace=False
-    )
-
-    def validate(self, attrs: dict) -> dict:
-        """Validate and authenticate the user"""
-
-        email = attrs.get('email')
-        password = attrs.get('password')
-
-        user = authenticate(
-            request=self.context.get('request'),
-            username=email,
-            password=password
-        )
-
-        if not user:
-            msg = _('Unable to authenticate with provided credentials')
-
-            raise serializers.ValidationError(msg, code='authentication')
-
-        attrs['user'] = user
-
-        return attrs
+        model = models.Comment
+        field = ('content', 'rating', 'date_add',
+                 'user_added', 'product')
 
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Product
-        fields = ('name', 'description', 'price', 'quantity', 'category')
+        model = models.Product
+        fields = ('name', 'description','amount_rating',
+                  'rating', 'price', 'stock', 'category',
+                  'date_added', 'img_url','points')
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(read_only=True)
+    order = serializers.PrimaryKeyRelatedField(queryset=models.Order.objects.all())
+    class Meta:
+        model = models.OrderItem
+        fields = ('order', 'product', 'quantity',
+                  'price', 'loyalty_p')
+
+class OrderSerializer(serializers.ModelSerializer):
+    products = OrderItemSerializer(many=True)
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    class Meta:
+        model = models.Order
+        fields = ('user','products', 'total_price', 'total_loyalty', 'address', 'is_paid')
