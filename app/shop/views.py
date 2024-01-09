@@ -1,7 +1,9 @@
-from rest_framework import generics, viewsets
+from rest_framework import generics, viewsets, status
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAdminUser
+from django.shortcuts import get_object_or_404
 from rest_framework.filters import SearchFilter
 from shop.models import Product, Order, Comment, Category, OrderItem
 from shop.serializers import (OrderSerializer, ProductSerializer,
@@ -48,6 +50,41 @@ class OrderViewSet(viewsets.ModelViewSet):
         else:
             return Order.objects.filter(user=user.id)
 
+    def perform_create(self, serializer):
+        user = self.request.user
+        return serializer.save(user=user)
+
+
+class OrderItemViewSet(viewsets.ModelViewSet):
+    serializer_class = OrderItemSerializer
+    authentication_classes = (TokenAuthentication,)
+    queryset = OrderItem.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        # Odczytaj dane żądania
+        data = request.data
+        order_id = int(data.get('order', 0))
+        product_id = int(data.get('product_id', 0))
+        quantity = int(data.get('quantity', 0))
+
+        # Znajdź istniejący Order lub obsłuż błąd, jeśli nie istnieje
+        order_instance = get_object_or_404(Order, pk=order_id)
+
+        # Stwórz i zapisz nowy OrderItem
+        order_item = OrderItem(order=order_instance, product_id=product_id, quantity=quantity)
+        order_item.save()
+
+        # Zaktualizuj total_price i total_loyalty w Order
+        order_instance.sum_price_points()
+        order_instance.save(update_fields=['total_price', 'total_loyalty'])
+
+        # Utwórz odpowiedź
+        serializer = self.get_serializer(order_item)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=201, headers=headers)
+
+
+
 
 class UserOrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
@@ -63,7 +100,10 @@ class CommentViewSet(viewsets.ModelViewSet):
     authentication_classes = (TokenAuthentication,)
     queryset = Comment.objects.all()
 
+    def perform_create(self, serializer):
+        return serializer.save(user_added=self.request.user)
+
 
 class CommentListView(generics.ListAPIView):
     serializer_class = CommentSerializer
-    queryset = Product.objects.all()
+    queryset = Comment.objects.all()

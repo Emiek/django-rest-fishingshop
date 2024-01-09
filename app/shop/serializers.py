@@ -7,7 +7,7 @@ from user.models import User
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Category
-        fields = ('name',)
+        fields = ('id', 'name')
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -16,7 +16,7 @@ class CommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = models.Comment
-        fields = ('content', 'rating', 'date_add',
+        fields = ('id', 'content', 'rating', 'date_add',
                   'user_added', 'product')
 
     def validate_rating(self, value):
@@ -28,11 +28,14 @@ class CommentSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     date_added = serializers.DateField(read_only=True, format='%d %B %Y')
     comments = CommentSerializer(read_only=True, many=True, source='comment_set')
+    category = CategorySerializer(read_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(queryset=models.Category.objects.all(), source='category',
+                                                  write_only=True)
 
     class Meta:
         model = models.Product
-        fields = ('name', 'description', 'amount_rating',
-                  'rating', 'price', 'stock', 'category',
+        fields = ('id', 'name', 'description', 'amount_rating',
+                  'rating', 'price', 'stock', 'category','category_id', 'sold_count',
                   'date_added', 'img_url', 'points', 'comments')
 
     def validate_price(self, value):
@@ -48,11 +51,12 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
-    order = serializers.PrimaryKeyRelatedField(queryset=models.Order.objects.all())
+    product_id = serializers.PrimaryKeyRelatedField(queryset=models.Product.objects.all(), source='product',
+                                                     write_only=True)
 
     class Meta:
         model = models.OrderItem
-        fields = ('order', 'product', 'quantity',
+        fields = ('id', 'order', 'product','product_id', 'quantity',
                   'price', 'loyalty_p')
 
     def validate_quantity(self, value):
@@ -62,12 +66,9 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    products = OrderItemSerializer(many=True)
-    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
-    date_add = serializers.DateField(read_only=True, format='%d %B %Y')
+    products = OrderItemSerializer(many=True, source='orderitem_set', read_only=True)
 
     class Meta:
         model = models.Order
-        fields = ('user', 'products', 'total_price',
-                  'total_loyalty', 'address', 'is_paid', 'date_add')
+        fields = ('id', 'user', 'products', 'total_price', 'total_loyalty', 'address', 'is_paid', 'date_add')
         read_only_fields = ('total_price', 'total_loyalty')
