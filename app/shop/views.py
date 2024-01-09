@@ -5,8 +5,8 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAdminUser
 from django.shortcuts import get_object_or_404
 from rest_framework.filters import SearchFilter
-from shop.models import Product, Order, Comment, Category, OrderItem
-from shop.serializers import (OrderSerializer, ProductSerializer,
+from shop.models import Product, Order, Comment, Category, OrderItem, FavouriteProduct
+from shop.serializers import (OrderSerializer, ProductSerializer, FavouriteProductSerializer,
                               CommentSerializer, OrderItemSerializer, CategorySerializer)
 from shop.filters import ProductFilter
 
@@ -38,6 +38,39 @@ class ProductDetail(generics.RetrieveAPIView):
     queryset = Product.objects.all()
 
 
+class FavouriteProductListCreateView(generics.ListCreateAPIView):
+    queryset = FavouriteProduct.objects.all()
+    authentication_classes = (TokenAuthentication,)
+    serializer_class = FavouriteProductSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return FavouriteProduct.objects.all()
+        else:
+            return FavouriteProduct.objects.filter(user=user.id)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        return serializer.save(user=user)
+
+    def create(self, request, *args, **kwargs):
+        product_ids = request.data.get('product_ids', [])
+        favourites = []
+        for product_id in product_ids:
+            try:
+                product = Product.objects.get(pk=product_id)
+            except Product.DoesNotExist:
+                return Response({"detail": f"Product with ID {product_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            favourite_product = FavouriteProduct(user=self.request.user, product=product)
+            favourite_product.save()
+            favourites.append(favourite_product)
+
+        serializer = FavouriteProductSerializer(favourites, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     authentication_classes = (TokenAuthentication,)
@@ -61,20 +94,20 @@ class OrderItemViewSet(viewsets.ModelViewSet):
     queryset = OrderItem.objects.all()
 
     def create(self, request, *args, **kwargs):
-        # Odczytaj dane żądania
+
         data = request.data
         order_id = int(data.get('order', 0))
         product_id = int(data.get('product_id', 0))
         quantity = int(data.get('quantity', 0))
 
-        # Znajdź istniejący Order lub obsłuż błąd, jeśli nie istnieje
+
         order_instance = get_object_or_404(Order, pk=order_id)
 
-        # Stwórz i zapisz nowy OrderItem
+
         order_item = OrderItem(order=order_instance, product_id=product_id, quantity=quantity)
         order_item.save()
 
-        # Zaktualizuj total_price i total_loyalty w Order
+
         order_instance.sum_price_points()
         order_instance.save(update_fields=['total_price', 'total_loyalty'])
 
@@ -82,8 +115,6 @@ class OrderItemViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(order_item)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=201, headers=headers)
-
-
 
 
 class UserOrderListView(generics.ListAPIView):

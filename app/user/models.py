@@ -1,6 +1,6 @@
-from django.db import models
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
+from django.db import models
 
 
 class UserManager(BaseUserManager):
@@ -33,6 +33,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    favourite = models.ManyToManyField('shop.Product', blank=True)
     points = models.PositiveIntegerField(default=0)
 
     objects = UserManager()

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from shop import models
 from user.serializers import UserSerializer
-from user.models import User
+from django.shortcuts import get_object_or_404
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -30,12 +30,12 @@ class ProductSerializer(serializers.ModelSerializer):
     comments = CommentSerializer(read_only=True, many=True, source='comment_set')
     category = CategorySerializer(read_only=True)
     category_id = serializers.PrimaryKeyRelatedField(queryset=models.Category.objects.all(), source='category',
-                                                  write_only=True)
+                                                     write_only=True)
 
     class Meta:
         model = models.Product
         fields = ('id', 'name', 'description', 'amount_rating',
-                  'rating', 'price', 'stock', 'category','category_id', 'sold_count',
+                  'rating', 'price', 'stock', 'category', 'category_id', 'sold_count',
                   'date_added', 'img_url', 'points', 'comments')
 
     def validate_price(self, value):
@@ -49,14 +49,39 @@ class ProductSerializer(serializers.ModelSerializer):
         return value
 
 
+class FavouriteProductSerializer(serializers.ModelSerializer):
+    product = ProductSerializer(read_only=True)
+    product_ids = serializers.ListField(child=serializers.PrimaryKeyRelatedField(
+        queryset=models.Product.objects.all(),
+        write_only=True
+    ), write_only=True)
+
+    class Meta:
+        model = models.FavouriteProduct
+        fields = ('product_ids', 'product')
+
+    def create(self, validated_data):
+        product_ids = validated_data.pop('product_ids', [])
+        user = self.context['request'].user
+
+        favourites = []
+        for product_id in product_ids:
+            product = get_object_or_404(models.Product, pk=product_id)
+            favourite = models.FavouriteProduct(user=user, product=product)
+            favourite.save()
+            favourites.append(favourite)
+
+        return favourites
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(queryset=models.Product.objects.all(), source='product',
-                                                     write_only=True)
+                                                    write_only=True)
 
     class Meta:
         model = models.OrderItem
-        fields = ('id', 'order', 'product','product_id', 'quantity',
+        fields = ('id', 'order', 'product', 'product_id', 'quantity',
                   'price', 'loyalty_p')
 
     def validate_quantity(self, value):

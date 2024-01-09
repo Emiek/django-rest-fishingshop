@@ -20,6 +20,9 @@ class Product(models.Model):
     img_url = models.URLField(null=True, default=None)
     points = models.PositiveIntegerField(default=5)
 
+    def __str__(self):
+        return self.name
+
     def stock_decrease(self, quantity):
         if self.stock >= quantity:
             self.stock = self.stock - quantity
@@ -32,12 +35,17 @@ class Product(models.Model):
         self.save()
 
 
+class FavouriteProduct(models.Model):
+    user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, null=True, on_delete=models.CASCADE)
+
+
 class Order(models.Model):
     user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
     products = models.ManyToManyField(Product, through='OrderItem')
     date_add = models.DateField(auto_now=True)
     total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    total_loyalty = models.DecimalField(max_digits=10, decimal_places=2 ,default=0)
+    total_loyalty = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     address = models.TextField()
     is_paid = models.BooleanField(default=False)
 
@@ -90,4 +98,4 @@ class Comment(models.Model):
     def save(self, *args, **kwargs):
         self.rating_calculation()
         super().save(*args, **kwargs)
-        self.product.save(update_fields=['amount_rating', 'rating' ,'total_rating'])
+        self.product.save(update_fields=['amount_rating', 'rating', 'total_rating'])
